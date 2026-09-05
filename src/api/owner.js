@@ -28,23 +28,19 @@ export async function cancelBooking(bookingId) {
 // SHOPS
 // ===============================
 
+
 export async function createShop(shopData) {
   const formData = new FormData()
 
   Object.entries(shopData).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== '') {
+    if (value !== null && value !== undefined) {
       formData.append(key, value)
     }
   })
 
   const response = await api.post(
     '/shops/gaming-centers/',
-    formData,
-    {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }
+    formData
   )
 
   return response.data
@@ -110,11 +106,7 @@ export async function createSlot(machineId, slotData) {
 }
 
 export async function bulkCreateSlots(data) {
-  const response = await api.post(
-    '/bookings/slots/',
-    data
-  )
-
+  const response = await api.post('/bookings/slots/bulk_create/', data)
   return response.data
 }
 
