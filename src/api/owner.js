@@ -38,9 +38,20 @@ export async function createShop(shopData) {
     }
   })
 
+  const token = localStorage.getItem('access_token')
+
+  if (!token) {
+    throw new Error('You are not logged in. Please login again.')
+  }
+
   const response = await api.post(
     '/shops/gaming-centers/',
-    formData
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
   )
 
   return response.data
