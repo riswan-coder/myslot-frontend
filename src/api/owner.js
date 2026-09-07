@@ -1,122 +1,83 @@
-import api from './client'
+﻿import api from './client'
 
-// ===============================
-// BOOKINGS
-// ===============================
-
-export async function getMyBookings() {
-  const response = await api.get('/bookings/bookings/')
-  return response.data
-}
-
-export async function completeBooking(bookingId) {
-  const response = await api.post(
-    `/bookings/bookings/${bookingId}/complete/`
-  )
-  return response.data
-}
-
-export async function cancelBooking(bookingId) {
-  const response = await api.post(
-    `/bookings/bookings/${bookingId}/cancel/`
-  )
-  return response.data
-}
-
-
-// ===============================
-// SHOPS
-// ===============================
-
-
-export async function createShop(shopData) {
+function buildFormData(data) {
   const formData = new FormData()
-
-  Object.entries(shopData).forEach(([key, value]) => {
-    if (value !== null && value !== undefined) {
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
       formData.append(key, value)
     }
   })
-
-  const token = localStorage.getItem('access_token')
-
-  const response = await api.post(
-    '/shops/gaming-centers/',
-    formData,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  )
-
-  return response.data
+  return formData
 }
 
-
-// ===============================
-// GAMES
-// ===============================
+export async function createShop(shopData) {
+  const formData = buildFormData(shopData)
+  const res = await api.post('/shops/gaming-centers/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data
+}
 
 export async function getMyGames(shopId) {
-  const response = await api.get('/games/games/')
-
-  return response.data.filter(
-    (game) => Number(game.shop) === Number(shopId)
-  )
+  const res = await api.get('/games/games/')
+  return res.data.filter((g) => g.shop === Number(shopId))
 }
 
 export async function createGame(shopId, gameData) {
-  const response = await api.post('/games/games/', {
-    ...gameData,
-    shop: Number(shopId),
+  const formData = buildFormData({ ...gameData, shop: shopId })
+  const res = await api.post('/games/games/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   })
-
-  return response.data
+  return res.data
 }
 
-
-// ===============================
-// MACHINES
-// ===============================
-
 export async function createMachine(gameId, machineData) {
-  const response = await api.post('/games/machines/', {
-    ...machineData,
-    game: Number(gameId),
-  })
-
-  return response.data
+  const res = await api.post('/games/machines/', { ...machineData, game: gameId })
+  return res.data
 }
 
 export async function deleteMachine(machineId) {
   await api.delete(`/games/machines/${machineId}/`)
 }
 
-
-// ===============================
-// SLOTS
-// ===============================
-
-export async function getMySlots(shopId) {
-  const response = await api.get('/bookings/slots/')
-  return response.data
+export async function getMySlots() {
+  const res = await api.get('/bookings/slots/')
+  return res.data
 }
 
 export async function createSlot(machineId, slotData) {
-  const response = await api.post('/bookings/slots/', {
-    ...slotData,
-    machine: Number(machineId),
-  })
-
-  return response.data
+  const res = await api.post('/bookings/slots/', { ...slotData, machine: machineId })
+  return res.data
 }
 
-export async function bulkCreateSlots(data) {
-  const response = await api.post('/bookings/slots/bulk_create/', data)
-  return response.data
+export async function bulkCreateSlots(payload) {
+  const res = await api.post('/bookings/slots/bulk_create/', payload)
+  return res.data
 }
 
 export async function deleteSlot(slotId) {
   await api.delete(`/bookings/slots/${slotId}/`)
+}
+
+export async function getMyBookings() {
+  const res = await api.get('/bookings/bookings/')
+  return res.data
+}
+
+export async function completeBooking(bookingId) {
+  const res = await api.post(`/bookings/bookings/${bookingId}/complete/`)
+  return res.data
+}
+
+export async function cancelBooking(bookingId) {
+  const res = await api.post(`/bookings/bookings/${bookingId}/cancel/`)
+  return res.data
+}
+
+export async function getBookingStats(startDate, endDate) {
+  const params = new URLSearchParams()
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+  const res = await api.get(`/bookings/bookings/stats/?${params.toString()}`)
+  return res.data
 }
