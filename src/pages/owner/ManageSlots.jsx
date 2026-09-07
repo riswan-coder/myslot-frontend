@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getMyGames, getMySlots, createSlot, bulkCreateSlots, deleteSlot } from '../../api/owner'
+import { getMyGames, getMySlots, createSlot, bulkCreateSlots, deleteSlot, ownerBookSlot } from '../../api/owner'
 
 export default function ManageSlots() {
   const { shopId } = useParams()
@@ -25,6 +25,10 @@ export default function ManageSlots() {
   const [bulkDuration, setBulkDuration] = useState('60')
   const [bulkPrice, setBulkPrice] = useState('')
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
+
+  const [bookingSlotId, setBookingSlotId] = useState(null)
+  const [walkInName, setWalkInName] = useState('')
+  const [bookingSubmitting, setBookingSubmitting] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -101,6 +105,23 @@ export default function ManageSlots() {
     }
   }
 
+  async function handleWalkInBook(slotId) {
+    setBookingSubmitting(true)
+    setError('')
+    setSuccess('')
+    try {
+      await ownerBookSlot(slotId, walkInName.trim() || 'Walk-in Customer')
+      setSuccess('Slot booked for walk-in customer.')
+      setBookingSlotId(null)
+      setWalkInName('')
+      loadData()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not book slot.')
+    } finally {
+      setBookingSubmitting(false)
+    }
+  }
+
   const machineIdsOwned = new Set(allMachines.map((m) => m.id))
   const mySlots = slots.filter((s) => machineIdsOwned.has(s.machine))
 
@@ -121,7 +142,6 @@ export default function ManageSlots() {
         {error && <p className="text-red-400 text-sm">{error}</p>}
         {success && <p className="text-green-400 text-sm">{success}</p>}
 
-        {/* Bulk generator */}
         <form onSubmit={handleBulkGenerate} className="bg-zinc-950 border border-red-900/40 rounded-xl p-5 space-y-3">
           <p className="text-sm font-medium">⚡ Bulk Generate Slots</p>
           <p className="text-zinc-500 text-xs">Create many slots at once across a date range.</p>
@@ -215,7 +235,6 @@ export default function ManageSlots() {
           </button>
         </form>
 
-        {/* Single slot add */}
         <form onSubmit={handleAddSlot} className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 space-y-3">
           <p className="text-sm font-medium text-zinc-400">Or add a single slot</p>
           <select
@@ -277,28 +296,62 @@ export default function ManageSlots() {
             {mySlots.map((slot) => {
               const machine = allMachines.find((m) => m.id === slot.machine)
               return (
-                <div
-                  key={slot.id}
-                  className="flex justify-between items-center bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3"
-                >
-                  <div className="text-sm">
-                    <span className="font-medium">{machine?.gameName} — {machine?.machine_number}</span>
-                    <span className="text-zinc-500 ml-3">
-                      {slot.date} · {slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)} · ₹{slot.price}
-                    </span>
-                    {slot.is_booked && (
-                      <span className="ml-3 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
-                        Booked
+                <div key={slot.id} className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm">
+                      <span className="font-medium">{machine?.gameName} — {machine?.machine_number}</span>
+                      <span className="text-zinc-500 ml-3">
+                        {slot.date} · {slot.start_time.slice(0, 5)}–{slot.end_time.slice(0, 5)} · ₹{slot.price}
                       </span>
-                    )}
+                      {slot.is_booked && (
+                        <span className="ml-3 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
+                          Booked
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {!slot.is_booked && bookingSlotId !== slot.id && (
+                        <button
+                          onClick={() => setBookingSlotId(slot.id)}
+                          className="text-xs border border-green-900 text-green-400 hover:bg-green-950 px-3 py-1.5 rounded-lg"
+                        >
+                          Book Walk-in
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteSlot(slot.id)}
+                        disabled={slot.is_booked}
+                        className="text-zinc-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteSlot(slot.id)}
-                    disabled={slot.is_booked}
-                    className="text-zinc-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
-                  >
-                    Remove
-                  </button>
+
+                  {bookingSlotId === slot.id && (
+                    <div className="mt-3 pt-3 border-t border-zinc-800 flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Customer name (optional)"
+                        value={walkInName}
+                        onChange={(e) => setWalkInName(e.target.value)}
+                        className="flex-1 bg-black border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-red-500"
+                      />
+                      <button
+                        onClick={() => handleWalkInBook(slot.id)}
+                        disabled={bookingSubmitting}
+                        className="bg-green-700 hover:bg-green-600 disabled:opacity-50 px-3 py-1.5 rounded-lg text-sm"
+                      >
+                        {bookingSubmitting ? 'Booking...' : 'Confirm'}
+                      </button>
+                      <button
+                        onClick={() => { setBookingSlotId(null); setWalkInName('') }}
+                        className="text-zinc-500 hover:text-white text-sm px-2"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}

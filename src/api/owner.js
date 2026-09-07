@@ -59,6 +59,14 @@ export async function deleteSlot(slotId) {
   await api.delete(`/bookings/slots/${slotId}/`)
 }
 
+export async function ownerBookSlot(slotId, customerName) {
+  const res = await api.post('/bookings/bookings/owner_book/', {
+    slot: slotId,
+    customer_name: customerName,
+  })
+  return res.data
+}
+
 export async function getMyBookings() {
   const res = await api.get('/bookings/bookings/')
   return res.data
