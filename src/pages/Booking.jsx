@@ -1,18 +1,16 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
+﻿import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/client'
 import { getShop, getGamesForShop } from '../api/shops'
-import { getMyBookings } from '../api/owner'
+import { createPaymentOrder, verifyPayment } from '../api/payment'
 
 function getNextDays(count = 5) {
   const days = []
-
   for (let i = 0; i < count; i++) {
     const d = new Date()
     d.setDate(d.getDate() + i)
     days.push(d)
   }
-
   return days
 }
 
@@ -23,670 +21,260 @@ function formatDateForApi(date) {
 export default function Booking() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
 
   const [shop, setShop] = useState(null)
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [selectedGame, setSelectedGame] = useState(null)
-  const [selectedMachine, setSelectedMachine] = useState(null)
   const [selectedDate, setSelectedDate] = useState(null)
   const [availableSlots, setAvailableSlots] = useState([])
   const [selectedSlot, setSelectedSlot] = useState(null)
-
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
-
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   const days = getNextDays(5)
 
-  // Load shop and games
   useEffect(() => {
     async function load() {
       try {
         const shopData = await getShop(id)
         const gamesData = await getGamesForShop(id)
-
         setShop(shopData)
         setGames(gamesData)
-
-        // Get game ID from URL
-        const params = new URLSearchParams(location.search)
-        const gameId = params.get('game')
-
-        if (gameId) {
-          const game = gamesData.find(
-            (g) => String(g.id) === String(gameId)
-          )
-
-          if (game) {
-            setSelectedGame(game)
-          }
-        }
       } catch (err) {
-        console.error(err)
-        setError('Could not load booking details.')
+        setError('Could not load shop details.')
       } finally {
         setLoading(false)
       }
     }
-
     load()
-  }, [id, location.search])
+  }, [id])
 
-  // When game changes, reset machine/date/slot
-  useEffect(() => {
-    setSelectedMachine(null)
-    setSelectedDate(null)
-    setSelectedSlot(null)
-    setAvailableSlots([])
-  }, [selectedGame])
-
-  // Load slots for selected machine + selected date
   useEffect(() => {
     async function loadSlots() {
-      if (!selectedMachine || !selectedDate) {
-        setAvailableSlots([])
-        return
-      }
-
+      if (!selectedGame || !selectedDate) return
       try {
         const res = await api.get('/bookings/slots/')
-
         const dateStr = formatDateForApi(selectedDate)
-
+        const machineIds = selectedGame.machines.map((m) => m.id)
         const filtered = res.data.filter(
-          (slot) =>
-            String(slot.machine) === String(selectedMachine.id) &&
-            slot.date === dateStr
+          (s) => machineIds.includes(s.machine) && s.date === dateStr
         )
-
         setAvailableSlots(filtered)
-      } catch (err) {
-        console.error(err)
+      } catch {
         setAvailableSlots([])
       }
     }
-
     loadSlots()
-  }, [selectedMachine, selectedDate])
+  }, [selectedGame, selectedDate])
 
-  const canConfirm =
-    selectedGame &&
-    selectedMachine &&
-    selectedDate &&
-    selectedSlot &&
-    guestName.trim() &&
-    guestPhone.trim()
+  const canConfirm = selectedGame && selectedDate && selectedSlot && guestName.trim() && guestPhone.trim()
 
   async function handleConfirm() {
     setError('')
     setSubmitting(true)
-
     try {
-      const res = await api.post('/bookings/bookings/', {
-        slot: selectedSlot.id,
-        guest_name: guestName.trim(),
-        guest_phone: guestPhone.trim(),
-      })
+      const order = await createPaymentOrder(selectedSlot.id)
 
-      navigate('/booking-confirmed', {
-        state: {
-          bookingId: res.data.booking_id,
-          shopName: shop.name,
-          gameName: selectedGame.name,
-          machineName:
-            selectedMachine.name ||
-            selectedMachine.machine_name ||
-            `Machine ${selectedMachine.id}`,
-          date: selectedDate.toDateString(),
-          time: `${selectedSlot.start_time} – ${selectedSlot.end_time}`,
-          price: selectedSlot.price,
+      const options = {
+        key: order.razorpay_key,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'MySlot',
+        description: `${selectedGame.name} at ${shop.name}`,
+        order_id: order.order_id,
+        prefill: {
+          name: guestName,
+          contact: guestPhone,
         },
-      })
-    } catch (err) {
-      console.error(err)
+        theme: {
+          color: '#dc2626',
+        },
+        handler: async function (response) {
+          try {
+            const result = await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              slot: selectedSlot.id,
+              guest_name: guestName,
+              guest_phone: guestPhone,
+            })
 
-      setError(
-        err.response?.data?.error ||
-        'Something went wrong. Please try again.'
-      )
-    } finally {
+            navigate('/booking-confirmed', {
+              state: {
+                bookingId: result.booking_id,
+                shopName: shop.name,
+                gameName: selectedGame.name,
+                date: selectedDate.toDateString(),
+                time: `${selectedSlot.start_time} – ${selectedSlot.end_time}`,
+                price: selectedSlot.price,
+              },
+            })
+          } catch (err) {
+            setError('Payment succeeded but booking failed. Contact support with your payment ID: ' + response.razorpay_payment_id)
+          } finally {
+            setSubmitting(false)
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setSubmitting(false)
+          },
+        },
+      }
+
+      const razorpayCheckout = new window.Razorpay(options)
+      razorpayCheckout.open()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not start payment. Please try again.')
       setSubmitting(false)
     }
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-zinc-400">
-          Loading booking...
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !shop) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-400 mb-3">{error}</p>
-
-          <Link
-            to="/"
-            className="text-red-400 underline"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    )
+    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>
   }
 
   if (!shop) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p>Shop not found.</p>
-      </div>
-    )
-  }
-
-  if (!selectedGame) {
-    return (
-      <div className="min-h-screen bg-black text-white">
-        <header className="border-b border-zinc-900 px-6 py-4">
-          <Link
-            to={`/shop/${shop.id}`}
-            className="text-zinc-400 hover:text-white text-sm"
-          >
-            ← Back to {shop.name}
-          </Link>
-        </header>
-
-        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <div className="text-4xl mb-4">🎮</div>
-
-          <h1 className="text-xl font-semibold mb-2">
-            Please select a game
-          </h1>
-
-          <p className="text-zinc-500 text-sm mb-6">
-            Choose a game before booking.
-          </p>
-
-          <Link
-            to={`/shop/${shop.id}`}
-            className="inline-block bg-red-600 hover:bg-red-500 px-5 py-2.5 rounded-lg text-sm font-medium"
-          >
-            Choose Game
-          </Link>
-        </div>
+        <p>Shop not found. <Link to="/" className="text-red-400 underline">Go home</Link></p>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
-
-      {/* HEADER */}
       <header className="border-b border-zinc-900 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-
-          <Link
-            to={`/shop/${shop.id}`}
-            className="text-zinc-400 hover:text-white text-sm"
-          >
-            ← Back to {shop.name}
-          </Link>
-
-          <span className="text-sm font-semibold">
-            MySlot <span className="text-red-500">🎮</span>
-          </span>
-
-        </div>
+        <Link to={`/shop/${shop.id}`} className="text-zinc-400 hover:text-white text-sm">← Back to {shop.name}</Link>
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+        <h1 className="text-2xl font-bold">Book a Slot at {shop.name}</h1>
 
-        {/* TITLE */}
         <div>
-          <p className="text-red-500 text-xs uppercase tracking-widest mb-2">
-            Booking
-          </p>
-
-          <h1 className="text-2xl md:text-3xl font-bold">
-            Book Your Gaming Slot
-          </h1>
-
-          <p className="text-zinc-500 text-sm mt-1">
-            Select a machine, date and available time slot.
-          </p>
-        </div>
-
-        {/* SELECTED GAME */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3">
-            Selected Game
-          </h2>
-
-          <div className="bg-zinc-950 border border-red-500/40 rounded-xl overflow-hidden">
-
-            <div className="flex items-center">
-
-              <div className="w-28 h-24 bg-zinc-900 flex-shrink-0">
-
-                {selectedGame.image ? (
-                  <img
-                    src={selectedGame.image}
-                    alt={selectedGame.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-3xl">
-                    🎮
-                  </div>
-                )}
-
-              </div>
-
-              <div className="p-4 flex-1">
-
-                <div className="flex items-center justify-between gap-3">
-
-                  <div>
-                    <h3 className="font-semibold">
-                      {selectedGame.name}
-                    </h3>
-
-                    <p className="text-zinc-500 text-sm mt-1">
-                      {selectedGame.machines?.length || 0}{' '}
-                      {(selectedGame.machines?.length || 0) === 1
-                        ? 'machine'
-                        : 'machines'}
-                    </p>
-                  </div>
-
-                  <span className="text-red-400 font-semibold whitespace-nowrap">
-                    ₹{selectedGame.price_per_hour}/hr
-                  </span>
-
-                </div>
-
-              </div>
-
-            </div>
-
+          <h2 className="text-lg font-semibold mb-3">1. Select a Game</h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {games.map((game) => (
+              <button
+                key={game.id}
+                onClick={() => {
+                  setSelectedGame(game)
+                  setSelectedSlot(null)
+                }}
+                className={`text-left border rounded-lg p-4 transition ${
+                  selectedGame?.id === game.id
+                    ? 'border-red-500 bg-red-500/10'
+                    : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
+                }`}
+              >
+                <p className="font-medium">{game.name}</p>
+                <p className="text-zinc-500 text-sm">₹{game.price_per_hour}/hr · {game.machines.length} machines</p>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* MACHINE SELECTION */}
-        <div>
-
-          <div className="flex items-center justify-between mb-3">
-
-            <h2 className="text-lg font-semibold">
-              1. Select Machine
-            </h2>
-
-            {selectedMachine && (
-              <span className="text-red-400 text-sm">
-                Selected
-              </span>
-            )}
-
-          </div>
-
-          {!selectedGame.machines ||
-          selectedGame.machines.length === 0 ? (
-
-            <div className="bg-zinc-950 border border-dashed border-zinc-800 rounded-xl p-8 text-center">
-
-              <div className="text-3xl mb-3">
-                🖥️
-              </div>
-
-              <p className="text-zinc-500 text-sm">
-                No machines available for this game.
-              </p>
-
-            </div>
-
-          ) : (
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-
-              {selectedGame.machines.map((machine, index) => {
-
-                const isSelected =
-                  selectedMachine?.id === machine.id
-
-                const machineName =
-                  machine.name ||
-                  machine.machine_name ||
-                  machine.title ||
-                  `Machine ${index + 1}`
-
-                return (
-                  <button
-                    key={machine.id}
-                    onClick={() => {
-                      setSelectedMachine(machine)
-                      setSelectedDate(null)
-                      setSelectedSlot(null)
-                      setAvailableSlots([])
-                    }}
-                    className={`text-left border rounded-xl p-4 transition ${
-                      isSelected
-                        ? 'border-red-500 bg-red-500/10'
-                        : 'border-zinc-800 bg-zinc-950 hover:border-red-500/50'
-                    }`}
-                  >
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-                        <div className="text-lg mb-1">
-                          🖥️
-                        </div>
-
-                        <p className="font-medium">
-                          {machineName}
-                        </p>
-
-                        <p className="text-zinc-600 text-xs mt-1">
-                          Machine ID: {machine.id}
-                        </p>
-                      </div>
-
-                      {isSelected && (
-                        <span className="text-red-500 text-lg">
-                          ✓
-                        </span>
-                      )}
-
-                    </div>
-
-                  </button>
-                )
-              })}
-
-            </div>
-
-          )}
-
-        </div>
-
-        {/* DATE */}
-        {selectedMachine && (
+        {selectedGame && (
           <div>
-
-            <div className="flex items-center justify-between mb-3">
-
-              <h2 className="text-lg font-semibold">
-                2. Select Date
-              </h2>
-
-              {selectedDate && (
-                <span className="text-red-400 text-sm">
-                  {selectedDate.toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </span>
-              )}
-
+            <h2 className="text-lg font-semibold mb-3">2. Select a Date</h2>
+            <div className="flex gap-3 overflow-x-auto">
+              {days.map((d) => (
+                <button
+                  key={d.toDateString()}
+                  onClick={() => {
+                    setSelectedDate(d)
+                    setSelectedSlot(null)
+                  }}
+                  className={`flex-shrink-0 w-20 py-3 rounded-lg border text-center transition ${
+                    selectedDate?.toDateString() === d.toDateString()
+                      ? 'border-red-500 bg-red-500/10'
+                      : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
+                  }`}
+                >
+                  <p className="text-xs text-zinc-500">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                  <p className="font-semibold">{d.getDate()}</p>
+                </button>
+              ))}
             </div>
-
-            <div className="flex gap-3 overflow-x-auto pb-2">
-
-              {days.map((d) => {
-
-                const isSelected =
-                  selectedDate?.toDateString() ===
-                  d.toDateString()
-
-                return (
-                  <button
-                    key={d.toDateString()}
-                    onClick={() => {
-                      setSelectedDate(d)
-                      setSelectedSlot(null)
-                    }}
-                    className={`flex-shrink-0 w-20 py-3 rounded-xl border text-center transition ${
-                      isSelected
-                        ? 'border-red-500 bg-red-500/10 text-white'
-                        : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-600'
-                    }`}
-                  >
-
-                    <p className="text-xs text-zinc-500">
-                      {d.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                      })}
-                    </p>
-
-                    <p className="font-semibold text-lg mt-1">
-                      {d.getDate()}
-                    </p>
-
-                    <p className="text-xs text-zinc-600">
-                      {d.toLocaleDateString('en-US', {
-                        month: 'short',
-                      })}
-                    </p>
-
-                  </button>
-                )
-              })}
-
-            </div>
-
           </div>
         )}
 
-        {/* TIME SLOTS */}
-        {selectedMachine && selectedDate && (
+        {selectedGame && selectedDate && (
           <div>
-
-            <h2 className="text-lg font-semibold mb-3">
-              3. Select Time Slot
-            </h2>
-
+            <h2 className="text-lg font-semibold mb-3">3. Select a Time Slot</h2>
             {availableSlots.length === 0 ? (
-
-              <div className="bg-zinc-950 border border-dashed border-zinc-800 rounded-xl p-8 text-center">
-
-                <div className="text-3xl mb-3">
-                  🕐
-                </div>
-
-                <p className="text-zinc-500 text-sm">
-                  No slots found for this machine on this date.
-                </p>
-
-                <p className="text-zinc-600 text-xs mt-1">
-                  Try another date or machine.
-                </p>
-
-              </div>
-
+              <p className="text-zinc-500 text-sm">No slots found for this date. Try another date.</p>
             ) : (
-
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-
-                {availableSlots.map((slot) => {
-
-                  const isSelected =
-                    selectedSlot?.id === slot.id
-
-                  return (
-                    <button
-                      key={slot.id}
-                      disabled={slot.is_booked}
-                      onClick={() => setSelectedSlot(slot)}
-                      className={`py-3 rounded-xl text-sm border transition ${
-                        slot.is_booked
-                          ? 'border-zinc-900 bg-zinc-950 text-zinc-700 cursor-not-allowed line-through'
-                          : isSelected
-                          ? 'border-red-500 bg-red-500/10 text-white'
-                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-red-500/50'
-                      }`}
-                    >
-
-                      {slot.start_time.slice(0, 5)}
-
-                      {slot.is_booked && (
-                        <div className="text-[10px] mt-1">
-                          Booked
-                        </div>
-                      )}
-
-                    </button>
-                  )
-                })}
-
+                {availableSlots.map((slot) => (
+                  <button
+                    key={slot.id}
+                    disabled={slot.is_booked}
+                    onClick={() => setSelectedSlot(slot)}
+                    className={`py-2 rounded-lg text-sm border transition ${
+                      slot.is_booked
+                        ? 'border-zinc-800 bg-zinc-950 text-zinc-600 cursor-not-allowed line-through'
+                        : selectedSlot?.id === slot.id
+                        ? 'border-red-500 bg-red-500/10'
+                        : 'border-zinc-700 bg-zinc-950 hover:border-zinc-500'
+                    }`}
+                  >
+                    {slot.start_time.slice(0, 5)}
+                  </button>
+                ))}
               </div>
-
             )}
-
           </div>
         )}
 
-        {/* CUSTOMER DETAILS */}
         {selectedSlot && (
           <div>
-
-            <h2 className="text-lg font-semibold mb-3">
-              4. Your Details
-            </h2>
-
+            <h2 className="text-lg font-semibold mb-3">4. Your Details</h2>
             <div className="grid sm:grid-cols-2 gap-3">
-
               <input
                 type="text"
                 placeholder="Full Name"
                 value={guestName}
-                onChange={(e) =>
-                  setGuestName(e.target.value)
-                }
-                className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500"
+                onChange={(e) => setGuestName(e.target.value)}
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-red-500"
               />
-
               <input
                 type="tel"
                 placeholder="Phone Number"
                 value={guestPhone}
-                onChange={(e) =>
-                  setGuestPhone(e.target.value)
-                }
-                className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500"
+                onChange={(e) => setGuestPhone(e.target.value)}
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-red-500"
               />
-
             </div>
-
           </div>
         )}
 
-        {/* BOOKING SUMMARY */}
         {canConfirm && (
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
-
-            <h3 className="font-semibold text-lg mb-4">
-              Booking Summary
-            </h3>
-
-            <div className="space-y-2 text-sm">
-
-              <div className="flex justify-between">
-                <span className="text-zinc-500">
-                  Gaming Center
-                </span>
-
-                <span className="text-white">
-                  {shop.name}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-zinc-500">
-                  Game
-                </span>
-
-                <span className="text-white">
-                  {selectedGame.name}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-zinc-500">
-                  Machine
-                </span>
-
-                <span className="text-white">
-                  {selectedMachine.name ||
-                    selectedMachine.machine_name ||
-                    `Machine ${selectedMachine.id}`}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-zinc-500">
-                  Date
-                </span>
-
-                <span className="text-white">
-                  {selectedDate.toDateString()}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-zinc-500">
-                  Time
-                </span>
-
-                <span className="text-white">
-                  {selectedSlot.start_time.slice(0, 5)}
-                  {' – '}
-                  {selectedSlot.end_time.slice(0, 5)}
-                </span>
-              </div>
-
-              <div className="border-t border-zinc-800 pt-3 mt-3 flex justify-between">
-
-                <span className="text-zinc-400">
-                  Total
-                </span>
-
-                <span className="text-red-400 font-bold text-lg">
-                  ₹{selectedSlot.price}
-                </span>
-
-              </div>
-
+            <h3 className="font-semibold mb-3">Booking Summary</h3>
+            <div className="text-sm text-zinc-400 space-y-1 mb-4">
+              <p>Name: <span className="text-white">{guestName}</span></p>
+              <p>Phone: <span className="text-white">{guestPhone}</span></p>
+              <p>Game: <span className="text-white">{selectedGame.name}</span></p>
+              <p>Date: <span className="text-white">{selectedDate.toDateString()}</span></p>
+              <p>Time: <span className="text-white">{selectedSlot.start_time.slice(0,5)} – {selectedSlot.end_time.slice(0,5)}</span></p>
+              <p>Amount: <span className="text-red-400 font-semibold">₹{selectedSlot.price}</span></p>
             </div>
-
-            {error && (
-              <p className="text-red-400 text-sm mt-4">
-                {error}
-              </p>
-            )}
-
+            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
             <button
               onClick={handleConfirm}
               disabled={submitting}
-              className="w-full mt-5 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl font-medium transition"
+              className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 py-3 rounded-lg font-medium"
             >
-              {submitting
-                ? 'Booking...'
-                : 'Confirm Booking'}
+              {submitting ? 'Opening Payment...' : `Pay ₹${selectedSlot.price} & Confirm`}
             </button>
-
           </div>
         )}
-
       </div>
     </div>
   )

@@ -160,7 +160,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
 
           <h1 className="text-xl font-bold tracking-tight">
-            MySlot <span className="text-red-500">🎮</span>
+            <span className="text-white">My</span>
+            <span className="text-red-500">Slot</span>
+            <span className="text-red-500"> 🎮</span>
           </h1>
 
           <nav className="flex items-center gap-6 text-sm text-zinc-400">
