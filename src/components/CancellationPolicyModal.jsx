@@ -14,13 +14,6 @@ export default function CancellationPolicyModal({ shopPhone, onAgree, onClose })
           <p>
             Cancellation requests must be made <span className="text-white">at least 2 hours before</span> the booked slot time. Requests made after this period may not be accepted.
           </p>
-          <p>
-            MySlot does not process cancellation or refund requests directly. Any cancellation or refund amount will be decided and handled by the gaming center.
-          </p>
-          <p>
-            Please contact the gaming center directly at{' '}
-            <span className="text-red-400 font-medium">{shopPhone}</span>.
-          </p>
         </div>
 
         <label className="flex items-start gap-3 mb-5 cursor-pointer">

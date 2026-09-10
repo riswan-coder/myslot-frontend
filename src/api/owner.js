@@ -82,6 +82,11 @@ export async function cancelBooking(bookingId) {
   return res.data
 }
 
+export async function cancelAndRefundBooking(bookingId) {
+  const res = await api.post(`/bookings/bookings/${bookingId}/cancel_and_refund/`)
+  return res.data
+}
+
 export async function getBookingStats(startDate, endDate) {
   const params = new URLSearchParams()
   if (startDate) params.append('start_date', startDate)
