@@ -7,13 +7,19 @@ export default function CancellationPolicyModal({ shopPhone, onAgree, onClose })
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-6">
       <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-md w-full p-6">
         <h3 className="text-lg font-semibold mb-3">Cancellation Policy</h3>
-        <div className="text-zinc-400 text-sm space-y-3 mb-5">
+        <div className="text-zinc-400 text-sm space-y-3 mb-5 leading-relaxed">
           <p>
-            Cancellations are <span className="text-white">only accepted by calling the shop directly</span> at{' '}
-            <span className="text-red-400 font-medium">{shopPhone}</span>.
+            Customers must cancel their booking by directly calling the gaming center at the phone number provided on the booking.
           </p>
           <p>
-            Cancellation requests must be made <span className="text-white">at least 2 hours before</span> your booked slot time. Requests made after this window cannot be honored.
+            Cancellation requests must be made <span className="text-white">at least 2 hours before</span> the booked slot time. Requests made after this period may not be accepted.
+          </p>
+          <p>
+            MySlot does not process cancellation or refund requests directly. Any cancellation or refund amount will be decided and handled by the gaming center.
+          </p>
+          <p>
+            Please contact the gaming center directly at{' '}
+            <span className="text-red-400 font-medium">{shopPhone}</span>.
           </p>
         </div>
 
