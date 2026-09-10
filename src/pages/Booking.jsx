@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/client'
 import { getShop, getGamesForShop } from '../api/shops'
 import { createPaymentOrder, verifyPayment } from '../api/payment'
+import CancellationPolicyModal from '../components/CancellationPolicyModal'
 
 function getNextDays(count = 5) {
   const days = []
@@ -34,6 +35,7 @@ export default function Booking() {
   const [guestPhone, setGuestPhone] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [showPolicy, setShowPolicy] = useState(false)
 
   const days = getNextDays(5)
 
@@ -73,7 +75,12 @@ export default function Booking() {
 
   const canConfirm = selectedGame && selectedDate && selectedSlot && guestName.trim() && guestPhone.trim()
 
-  async function handleConfirm() {
+  async function handlePolicyAgree() {
+    setShowPolicy(false)
+    await startPayment()
+  }
+
+  async function startPayment() {
     setError('')
     setSubmitting(true)
     try {
@@ -267,7 +274,7 @@ export default function Booking() {
             </div>
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
             <button
-              onClick={handleConfirm}
+              onClick={() => setShowPolicy(true)}
               disabled={submitting}
               className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 py-3 rounded-lg font-medium"
             >
@@ -276,6 +283,14 @@ export default function Booking() {
           </div>
         )}
       </div>
+
+      {showPolicy && (
+        <CancellationPolicyModal
+          shopPhone={shop.phone}
+          onAgree={handlePolicyAgree}
+          onClose={() => setShowPolicy(false)}
+        />
+      )}
     </div>
   )
 }
