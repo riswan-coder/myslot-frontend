@@ -13,6 +13,8 @@ import AdminDashboard from './pages/admin/Dashboard'
 import CreateShop from './pages/owner/CreateShop'
 import MyBooking from './pages/MyBooking'
 import AdminUsers from './pages/admin/Users'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 
 export default function App() {
   return (
@@ -70,6 +72,8 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms-of-service" element={<TermsOfService />} />
       <Route 
         path="/my-booking" 
         element={<MyBooking />
@@ -83,6 +87,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+
     </Routes>
     
   )

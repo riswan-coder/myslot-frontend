@@ -362,21 +362,10 @@ export default function Home() {
           </p>
 
           <div className="flex gap-4">
-
-            <Link
-              to="/my-booking"
-              className="hover:text-zinc-300"
-            >
-              My Booking
-            </Link>
-
-            <Link
-              to="/login"
-              className="hover:text-zinc-300"
-            >
-              Owner Login
-            </Link>
-
+            <Link to="/my-booking" className="hover:text-zinc-300">My Booking</Link>
+            <Link to="/login" className="hover:text-zinc-300">Owner Login</Link>
+            <Link to="/privacy-policy" className="hover:text-zinc-300">Privacy Policy</Link>
+            <Link to="/terms-of-service" className="hover:text-zinc-300">Terms</Link>
           </div>
 
         </div>
