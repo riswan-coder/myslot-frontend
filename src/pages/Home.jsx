@@ -74,12 +74,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white">
       <header className="border-b border-zinc-900 sticky top-0 bg-black/80 backdrop-blur-md z-20">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-.1 flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight">
-            MySlot <span className="text-red-500">🎮</span>
+            <span className="text-white">My</span>
+            <span className="text-red-500">Slot</span>
+            <span className="text-white"> 🎮</span>
           </h1>
-          <nav className="flex items-center gap-6 text-sm text-zinc-400">
-            <Link to="/my-booking" className="hover:text-white transition-colors">My Booking</Link>
+                    <nav className="flex items-center gap-6 text-sm text-zinc-400">
             <Link
               to="/login"
               className="hidden sm:inline-block border border-zinc-800 hover:border-zinc-600 px-4 py-1.5 rounded-full text-xs text-zinc-300 hover:text-white transition-colors"
@@ -91,17 +92,11 @@ export default function Home() {
       </header>
 
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-red-600/10 via-transparent to-transparent pointer-events-none" />
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-28 text-center relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 via-transparent to-transparent pointer-events-none" />
+        <div className="max-w-6xl mx-auto px-6 py-2 md:py-28 text-center relative">
           <span className="inline-block text-xs uppercase tracking-widest text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-1.5 mb-6">
             Find & Book in Seconds
           </span>
-          <h2 className="text-4xl md:text-6xl font-bold mb-4 leading-tight">
-            Find Your Game.<br className="hidden md:block" /> Book Your Slot.
-          </h2>
-          <p className="text-zinc-400 max-w-lg mx-auto mb-10">
-            Discover gaming centers near you and reserve a slot instantly — no account, no hassle.
-          </p>
 
           <div className="max-w-xl mx-auto flex gap-2">
             <input
