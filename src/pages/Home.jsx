@@ -210,18 +210,26 @@ export default function Home() {
       {/* Header */}
       <header className="border-b border-zinc-900 sticky top-0 bg-black/80 backdrop-blur-md z-20">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">
-            MySlot <span className="text-red-500">🎮</span>
-          </h1>
+
+          <Link
+            to="/"
+            aria-label="MySlot home"
+            className="text-xl font-bold tracking-tight"
+          >
+            <span className="text-white">My</span>
+            <span className="text-red-500">Slot</span>
+            <span className="text-red-500"> 🎮</span>
+          </Link>
+
           <nav className="flex items-center gap-6 text-sm text-zinc-400">
-            <Link to="/my-booking" className="hover:text-white transition-colors">My Booking</Link>
             <Link
               to="/login"
-              className="hidden sm:inline-block border border-zinc-800 hover:border-zinc-600 px-4 py-1.5 rounded-full text-xs text-zinc-300 hover:text-white transition-colors"
+              className="hover:text-white transition-colors"
             >
               Owner Login
             </Link>
           </nav>
+
         </div>
       </header>
 
