@@ -74,7 +74,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white">
       <header className="border-b border-zinc-900 sticky top-0 bg-black/80 backdrop-blur-md z-20">
-        <div className="max-w-6xl mx-auto px-6 py-.1 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-1 flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight">
             <span className="text-white">My</span>
             <span className="text-red-500">Slot</span>
@@ -93,7 +93,7 @@ export default function Home() {
 
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 via-transparent to-transparent pointer-events-none" />
-        <div className="max-w-6xl mx-auto px-6 py-2 md:py-28 text-center relative">
+        <div className="max-w-6xl mx-auto px-6 py-1 md:py-28 text-center relative">
           <span className="inline-block text-xs uppercase tracking-widest text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-1.5 mb-6">
             Find & Book in Seconds
           </span>
