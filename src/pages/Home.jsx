@@ -209,7 +209,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="border-b border-zinc-900 sticky top-0 bg-black/80 backdrop-blur-md z-20">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
 
           <Link
             to="/"
