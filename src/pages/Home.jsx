@@ -93,10 +93,31 @@ export default function Home() {
 
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 via-transparent to-transparent pointer-events-none" />
-        <div className="max-w-6xl mx-auto px-6 py-1 md:py-28 text-center relative">
+        <div className="max-w-6xl mx-auto px-6 py-1 md:py-5 text-center relative">
           <span className="inline-block text-xs uppercase tracking-widest text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-4 py-1.5 mb-6">
             Find & Book in Seconds
           </span>
+
+          {locationStatus === 'idle' && (
+            <button
+              onClick={requestLocation}
+              className="inline-flex items-center gap-2 border border-zinc-800 hover:border-red-500/50 text-zinc-300 hover:text-white px-4 py-2 rounded-full text-sm mb-6 transition-colors"
+            >
+              📍 Show shops near me
+            </button>
+          )}
+          {locationStatus === 'asking' && (
+            <p className="text-zinc-500 text-sm mb-6">Getting your location...</p>
+          )}
+          {locationStatus === 'granted' && (
+            <p className="text-green-400 text-sm mb-6">📍 Showing shops sorted by distance from you</p>
+          )}
+          {locationStatus === 'denied' && (
+            <p className="text-zinc-500 text-sm mb-6">
+              Location unavailable — showing all shops.{' '}
+              <button onClick={requestLocation} className="underline hover:text-white">Try again</button>
+            </p>
+          )}
 
           <div className="max-w-xl mx-auto flex gap-2">
             <input
