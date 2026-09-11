@@ -251,7 +251,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-2 md:py-8 text-center relative">
 
           <span className="inline-block text-xs uppercase tracking-widest text-red-400 bg-red-500/20 border border-red-500/20 rounded-full px-4 py-1.5 mb-6">
-            Find & Book in Seconds
+            Find & Book your Slot
           </span>
 
           {/* Location */}
@@ -313,11 +313,6 @@ export default function Home() {
             )}
 
           </div>
-
-          {/* Search examples */}
-          <p className="text-zinc-600 text-xs mt-3">
-            Try: FIFA, GTA, PlayStation, PC Gaming, Kozhikode...
-          </p>
 
         </div>
       </section>
