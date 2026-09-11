@@ -1,4 +1,4 @@
-import api from './client'
+﻿import api from './client'
 
 export async function getShops() {
   const res = await api.get('/shops/gaming-centers/')
@@ -7,6 +7,11 @@ export async function getShops() {
 
 export async function getShop(id) {
   const res = await api.get(`/shops/gaming-centers/${id}/`)
+  return res.data
+}
+
+export async function getAllGames() {
+  const res = await api.get('/games/games/')
   return res.data
 }
 
