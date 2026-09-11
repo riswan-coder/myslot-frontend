@@ -254,19 +254,6 @@ export default function Home() {
             Find & Book in Seconds
           </span>
 
-          {/* Main SEO heading */}
-          <h1
-            id="hero-title"
-            className="text-3xl md:text-5xl font-bold tracking-tight mb-3"
-          >
-            Find Gaming Centers & Book Your Gaming Slot
-          </h1>
-
-          <p className="max-w-2xl mx-auto text-zinc-500 text-sm md:text-base mb-6">
-            Discover gaming centers near you and book PS5, PlayStation,
-            PC gaming, VR, racing and other gaming sessions online with MySlot.
-          </p>
-
           {/* Location */}
           {locationStatus === 'idle' && (
             <button
