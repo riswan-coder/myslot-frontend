@@ -21,6 +21,19 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
+// Randomly shuffle an array
+function shuffleArray(array) {
+  const shuffled = [...array]
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+
+  return shuffled
+}
+
 export default function Home() {
   const [shops, setShops] = useState([])
   const [games, setGames] = useState([])
@@ -40,7 +53,8 @@ export default function Home() {
           getAllGames(),
         ])
 
-        setShops(shopsData || [])
+        // Random shop order
+        setShops(shuffleArray(shopsData || []))
         setGames(gamesData || [])
       } catch (err) {
         console.error(err)
@@ -222,12 +236,14 @@ export default function Home() {
           </Link>
 
           <nav className="flex items-center gap-6 text-sm text-zinc-400">
+
             <Link
               to="/login"
               className="hover:text-white transition-colors"
             >
               Owner Login
             </Link>
+
           </nav>
 
         </div>
@@ -308,78 +324,8 @@ export default function Home() {
           </div>
 
         </div>
+
       </section>
-
-      {/* Games row */}
-      {uniqueGames.length > 0 && (
-        <section className="max-w-6xl mx-auto px-6 pb-10">
-
-          <div className="flex items-center justify-between mb-3">
-
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
-              Browse by Game
-            </h2>
-
-            {selectedGameName && (
-              <button
-                onClick={() => setSelectedGameName(null)}
-                className="text-xs text-red-400 hover:text-red-300"
-              >
-                Clear filter
-              </button>
-            )}
-
-          </div>
-
-          <div className="flex gap-3 overflow-x-auto pb-2">
-
-            {uniqueGames.map((game) => (
-              <button
-                key={game.name}
-                onClick={() => handleSelectGame(game.name)}
-                aria-label={`Show gaming centers offering ${game.name}`}
-                className={`flex-shrink-0 w-28 rounded-xl border overflow-hidden transition-colors ${
-                  selectedGameName === game.name
-                    ? 'border-red-500 bg-red-500/10'
-                    : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
-                }`}
-              >
-
-                <div className="w-full h-20 bg-zinc-900 flex items-center justify-center">
-
-                  {game.image ? (
-                    <img
-                      src={game.image}
-                      alt={game.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-2xl text-zinc-700">
-                      🎮
-                    </span>
-                  )}
-
-                </div>
-
-                <div className="p-2 text-left">
-
-                  <p className="text-xs font-medium truncate">
-                    {game.name}
-                  </p>
-
-                  <p className="text-zinc-500 text-[10px]">
-                    ₹{game.price}/hr
-                  </p>
-
-                </div>
-
-              </button>
-            ))}
-
-          </div>
-
-        </section>
-      )}
 
       {/* Gaming Centers */}
       <section
