@@ -46,16 +46,12 @@ export default function Home() {
 
   // Load shops + games
   useEffect(() => {
-    async function load() {
+    async function loadShops() {
       try {
-        const [shopsData, gamesData] = await Promise.all([
-          getShops(),
-          getAllGames(),
-        ])
+        const shopsData = await getShops()
 
         // Random shop order
         setShops(shuffleArray(shopsData || []))
-        setGames(gamesData || [])
       } catch (err) {
         console.error(err)
         setError('Could not load gaming centers.')
@@ -64,7 +60,17 @@ export default function Home() {
       }
     }
 
-    load()
+    async function loadGames() {
+      try {
+        const gamesData = await getAllGames()
+        setGames(gamesData || [])
+      } catch (err) {
+        console.error('Games loading error:', err)
+      }
+    }
+
+    loadShops()
+    loadGames()
   }, [])
 
   // Request user's location
