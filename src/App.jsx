@@ -15,6 +15,7 @@ import MyBooking from './pages/MyBooking'
 import AdminUsers from './pages/admin/Users'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
+import Support from './pages/Support'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/booking/:id" element={<Booking />} />
       <Route path="/booking-confirmed" element={<BookingConfirmed />} />
       <Route path="/login" element={<Login />} />
+            <Route path="/support" element={<Support />} />
       <Route
         path="/owner/dashboard"
         element={
