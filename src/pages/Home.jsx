@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { getShops, getAllGames } from '../api/shops'
+import { getShops } from '../api/shops'
 import ShopCard from '../components/ShopCard'
 import Spinner from '../components/Spinner'
 
@@ -36,15 +36,13 @@ function shuffleArray(array) {
 
 export default function Home() {
   const [shops, setShops] = useState([])
-  const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
-  const [selectedGameName, setSelectedGameName] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationStatus, setLocationStatus] = useState('idle')
 
-  // Load shops + games
+  // Load gaming centers only
   useEffect(() => {
     async function loadShops() {
       try {
@@ -60,17 +58,7 @@ export default function Home() {
       }
     }
 
-    async function loadGames() {
-      try {
-        const gamesData = await getAllGames()
-        setGames(gamesData || [])
-      } catch (err) {
-        console.error('Games loading error:', err)
-      }
-    }
-
     loadShops()
-    loadGames()
   }, [])
 
   // Request user's location
@@ -102,45 +90,6 @@ export default function Home() {
       }
     )
   }
-
-  // Build one card per unique game name,
-  // picking the first image/price found across shops
-  const uniqueGames = useMemo(() => {
-    const map = new Map()
-
-    for (const game of games) {
-      if (!game?.name) continue
-
-      const key = game.name.trim().toLowerCase()
-
-      if (!map.has(key)) {
-        map.set(key, {
-          name: game.name,
-          image: game.image,
-          price: game.price_per_hour,
-        })
-      }
-    }
-
-    return Array.from(map.values())
-  }, [games])
-
-  // Shop IDs that offer the currently selected game
-  const shopIdsForSelectedGame = useMemo(() => {
-    if (!selectedGameName) return null
-
-    const key = selectedGameName.trim().toLowerCase()
-
-    return new Set(
-      games
-        .filter(
-          (g) =>
-            g?.name &&
-            g.name.trim().toLowerCase() === key
-        )
-        .map((g) => g.shop)
-    )
-  }, [games, selectedGameName])
 
   // Add distance and sort nearest first
   const shopsWithDistance = useMemo(() => {
@@ -184,45 +133,21 @@ export default function Home() {
 
   // Search shops
   const filteredShops = useMemo(() => {
-    let list = shopsWithDistance
-
-    // Filter by selected game
-    if (shopIdsForSelectedGame) {
-      list = list.filter((shop) =>
-        shopIdsForSelectedGame.has(shop.id)
-      )
-    }
-
-    // Search by shop/location
     const q = query.trim().toLowerCase()
 
-    if (q) {
-      list = list.filter((shop) => {
-        const haystack = `
-          ${shop.name || ''}
-          ${shop.city || ''}
-          ${shop.area || ''}
-          ${shop.address || ''}
-        `.toLowerCase()
+    if (!q) return shopsWithDistance
 
-        return haystack.includes(q)
-      })
-    }
+    return shopsWithDistance.filter((shop) => {
+      const haystack = `
+        ${shop.name || ''}
+        ${shop.city || ''}
+        ${shop.area || ''}
+        ${shop.address || ''}
+      `.toLowerCase()
 
-    return list
-  }, [
-    shopsWithDistance,
-    query,
-    shopIdsForSelectedGame,
-  ])
-
-  function handleSelectGame(name) {
-    setSelectedGameName((prev) =>
-      prev === name ? null : name
-    )
-
-    setQuery('')
-  }
+      return haystack.includes(q)
+    })
+  }, [shopsWithDistance, query])
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -236,20 +161,18 @@ export default function Home() {
             aria-label="MySlot home"
             className="text-xl font-bold tracking-tight"
           >
-            <span className="text-white">My</span>
+            <span className="text-white">BookMy</span>
             <span className="text-red-500">Slot</span>
             <span className="text-red-500"> 🎮</span>
           </Link>
 
           <nav className="flex items-center gap-6 text-sm text-zinc-400">
-
             <Link
               to="/login"
               className="hover:text-white transition-colors"
             >
               Owner Login
             </Link>
-
           </nav>
 
         </div>
@@ -309,10 +232,7 @@ export default function Home() {
             <input
               type="text"
               value={query}
-              onChange={(e) => {
-                setQuery(e.target.value)
-                setSelectedGameName(null)
-              }}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by location, area, or gaming center name..."
               aria-label="Search gaming centers"
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded-full px-5 py-3.5 text-sm focus:outline-none focus:border-red-500 shadow-lg shadow-black/40"
@@ -330,7 +250,6 @@ export default function Home() {
           </div>
 
         </div>
-
       </section>
 
       {/* Gaming Centers */}
@@ -345,20 +264,16 @@ export default function Home() {
             id="gaming-centers-title"
             className="text-xl font-semibold"
           >
-            {selectedGameName
-              ? `Gaming Centers with ${selectedGameName}`
-              : query
+            {query
               ? `Results for "${query}"`
               : 'Gaming Centers Near You'}
           </h2>
 
-          {!query &&
-            !selectedGameName &&
-            shops.length > 0 && (
-              <span className="text-zinc-500 text-sm">
-                {shops.length} available
-              </span>
-            )}
+          {!query && shops.length > 0 && (
+            <span className="text-zinc-500 text-sm">
+              {shops.length} available
+            </span>
+          )}
 
         </div>
 
@@ -382,9 +297,7 @@ export default function Home() {
               </div>
 
               <p className="text-zinc-500">
-                {selectedGameName
-                  ? `No gaming centers currently offer ${selectedGameName}.`
-                  : query
+                {query
                   ? `No gaming centers match "${query}".`
                   : 'No gaming centers available yet.'}
               </p>
@@ -447,7 +360,6 @@ export default function Home() {
           </div>
 
         </div>
-
       </section>
 
       {/* Footer */}
@@ -456,18 +368,40 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-3 text-sm text-zinc-500">
 
           <p>
-            © 2026 MySlot — Find Your Game. Book Your Slot.
+            © 2026 BookMySlot — Find Your Game. Book Your Slot.
           </p>
 
           <div className="flex gap-4">
-            <Link to="/support" className="hover:text-zinc-300">Support</Link>
-            <Link to="/login" className="hover:text-zinc-300">Owner Login</Link>
-            <Link to="/privacy-policy" className="hover:text-zinc-300">Privacy Policy</Link>
-            <Link to="/terms-of-service" className="hover:text-zinc-300">Terms</Link>
+            <Link
+              to="/support"
+              className="hover:text-zinc-300"
+            >
+              Support
+            </Link>
+
+            <Link
+              to="/login"
+              className="hover:text-zinc-300"
+            >
+              Owner Login
+            </Link>
+
+            <Link
+              to="/privacy-policy"
+              className="hover:text-zinc-300"
+            >
+              Privacy Policy
+            </Link>
+
+            <Link
+              to="/terms-of-service"
+              className="hover:text-zinc-300"
+            >
+              Terms
+            </Link>
           </div>
 
         </div>
-
       </footer>
 
     </div>
