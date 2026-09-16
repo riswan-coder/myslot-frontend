@@ -194,13 +194,11 @@ export default function Booking() {
                 bookingId: result.booking_id,
                 shopName: shop.name,
                 gameName: selectedGame.name,
-                machineName:
-                  selectedMachine.name ||
-                  selectedMachine.machine_name ||
-                  `Machine ${selectedMachine.id}`,
                 date: selectedDate.toDateString(),
                 time: `${selectedSlot.start_time} – ${selectedSlot.end_time}`,
                 price: selectedSlot.price,
+                guestName: guestName,
+                guestPhone: guestPhone,
               },
             })
           } catch (err) {
