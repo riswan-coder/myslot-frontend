@@ -1,8 +1,18 @@
 ﻿import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useLocation,
+} from 'react-router-dom'
+
 import api from '../api/client'
 import { getShop, getGamesForShop } from '../api/shops'
-import { createPaymentOrder, verifyPayment } from '../api/payment'
+import {
+  createPaymentOrder,
+  verifyPayment,
+} from '../api/payment'
+
 import CancellationPolicyModal from '../components/CancellationPolicyModal'
 
 function getNextDays(count = 5) {
@@ -36,6 +46,10 @@ export default function Booking() {
   const [availableSlots, setAvailableSlots] = useState([])
   const [selectedSlot, setSelectedSlot] = useState(null)
 
+  // Temporary lock token
+  const [lockToken, setLockToken] = useState(null)
+  const [lockExpiresAt, setLockExpiresAt] = useState(null)
+
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
 
@@ -46,7 +60,7 @@ export default function Booking() {
   const days = getNextDays(5)
 
   // ---------------------------------------------------------
-  // LOAD SHOP + GAMES + SELECTED GAME FROM URL
+  // LOAD SHOP + GAMES + SELECTED GAME
   // ---------------------------------------------------------
   useEffect(() => {
     async function load() {
@@ -60,8 +74,6 @@ export default function Booking() {
         setShop(shopData)
         setGames(gamesData)
 
-        // Read selected game from URL:
-        // /booking/SHOP_ID?game=GAME_ID
         const params = new URLSearchParams(location.search)
         const gameId = params.get('game')
 
@@ -92,13 +104,56 @@ export default function Booking() {
   }, [id, location.search])
 
   // ---------------------------------------------------------
-  // RESET MACHINE / DATE / SLOT WHEN GAME CHANGES
+  // UNLOCK CURRENT SLOT
+  // ---------------------------------------------------------
+  async function unlockCurrentSlot() {
+    if (!selectedSlot || !lockToken) {
+      return
+    }
+
+    try {
+      await api.post(
+        `/bookings/slots/${selectedSlot.id}/unlock/`,
+        {
+          lock_token: lockToken,
+        }
+      )
+    } catch (err) {
+      console.error('Unlock error:', err)
+    }
+
+    setLockToken(null)
+    setLockExpiresAt(null)
+  }
+
+  // ---------------------------------------------------------
+  // RELEASE LOCK WHEN LEAVING PAGE
+  // ---------------------------------------------------------
+  useEffect(() => {
+    return () => {
+      if (selectedSlot && lockToken) {
+        api.post(
+          `/bookings/slots/${selectedSlot.id}/unlock/`,
+          {
+            lock_token: lockToken,
+          }
+        ).catch((err) => {
+          console.error('Page exit unlock error:', err)
+        })
+      }
+    }
+  }, [selectedSlot, lockToken])
+
+  // ---------------------------------------------------------
+  // RESET SELECTION WHEN GAME CHANGES
   // ---------------------------------------------------------
   useEffect(() => {
     setSelectedMachine(null)
     setSelectedDate(null)
     setSelectedSlot(null)
     setAvailableSlots([])
+    setLockToken(null)
+    setLockExpiresAt(null)
   }, [selectedGame])
 
   // ---------------------------------------------------------
@@ -118,7 +173,8 @@ export default function Booking() {
 
         const filtered = res.data.filter(
           (slot) =>
-            String(slot.machine) === String(selectedMachine.id) &&
+            String(slot.machine) ===
+              String(selectedMachine.id) &&
             slot.date === dateStr
         )
 
@@ -133,13 +189,81 @@ export default function Booking() {
   }, [selectedMachine, selectedDate])
 
   // ---------------------------------------------------------
-  // CHECK WHETHER BOOKING CAN BE CONFIRMED
+  // SELECT AND LOCK SLOT
+  // ---------------------------------------------------------
+  async function handleSelectSlot(slot) {
+    if (slot.is_booked) {
+      return
+    }
+
+    // Do nothing if this same slot is already selected
+    if (selectedSlot?.id === slot.id && lockToken) {
+      return
+    }
+
+    setError('')
+
+    // Release previous lock first
+    await unlockCurrentSlot()
+
+    try {
+      const res = await api.post(
+        `/bookings/slots/${slot.id}/lock/`
+      )
+
+      setSelectedSlot(slot)
+      setLockToken(res.data.lock_token)
+      setLockExpiresAt(res.data.expires_at)
+
+    } catch (err) {
+      console.error(err)
+
+      if (err.response?.status === 409) {
+        setError(
+          'This slot is currently being reserved by another customer. Please choose another slot.'
+        )
+      } else {
+        setError(
+          err.response?.data?.error ||
+            'Could not reserve this slot. Please try again.'
+        )
+      }
+
+      setSelectedSlot(null)
+      setLockToken(null)
+      setLockExpiresAt(null)
+
+      // Refresh slots
+      try {
+        const res = await api.get(
+          '/bookings/slots/'
+        )
+
+        const dateStr = formatDateForApi(selectedDate)
+
+        const filtered = res.data.filter(
+          (s) =>
+            String(s.machine) ===
+              String(selectedMachine.id) &&
+            s.date === dateStr
+        )
+
+        setAvailableSlots(filtered)
+      } catch (refreshError) {
+        console.error(refreshError)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------
+  // CHECK BOOKING CAN BE CONFIRMED
   // ---------------------------------------------------------
   const canConfirm =
     selectedGame &&
     selectedMachine &&
     selectedDate &&
     selectedSlot &&
+    lockToken &&
     guestName.trim() &&
     guestPhone.trim()
 
@@ -152,14 +276,26 @@ export default function Booking() {
   }
 
   // ---------------------------------------------------------
-  // START RAZORPAY PAYMENT
+  // START PAYMENT
   // ---------------------------------------------------------
   async function startPayment() {
     setError('')
+
+    if (!selectedSlot || !lockToken) {
+      setError(
+        'Your slot reservation has expired. Please select the slot again.'
+      )
+      return
+    }
+
     setSubmitting(true)
 
     try {
-      const order = await createPaymentOrder(selectedSlot.id)
+      // Create Razorpay order using the lock token
+      const order = await createPaymentOrder(
+        selectedSlot.id,
+        lockToken
+      )
 
       const options = {
         key: order.razorpay_key,
@@ -181,12 +317,22 @@ export default function Booking() {
         handler: async function (response) {
           try {
             const result = await verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
+              razorpay_order_id:
+                response.razorpay_order_id,
+
+              razorpay_payment_id:
+                response.razorpay_payment_id,
+
+              razorpay_signature:
+                response.razorpay_signature,
+
               slot: selectedSlot.id,
-              guest_name: guestName,
-              guest_phone: guestPhone,
+
+              // IMPORTANT
+              lock_token: lockToken,
+
+              guest_name: guestName.trim(),
+              guest_phone: guestPhone.trim(),
             })
 
             navigate('/booking-confirmed', {
@@ -194,18 +340,35 @@ export default function Booking() {
                 bookingId: result.booking_id,
                 shopName: shop.name,
                 gameName: selectedGame.name,
+
+                machineName:
+                  selectedMachine.name ||
+                  selectedMachine.machine_name ||
+                  `Machine ${selectedMachine.id}`,
+
                 date: selectedDate.toDateString(),
-                time: `${selectedSlot.start_time} – ${selectedSlot.end_time}`,
+
+                time:
+                  `${selectedSlot.start_time} – ` +
+                  `${selectedSlot.end_time}`,
+
                 price: selectedSlot.price,
+
                 guestName: guestName,
                 guestPhone: guestPhone,
               },
             })
+
+            // Booking succeeded.
+            setLockToken(null)
+            setLockExpiresAt(null)
+
           } catch (err) {
             console.error(err)
 
             setError(
-              'Payment succeeded but booking failed. Contact support with your payment ID: ' +
+              err.response?.data?.error ||
+                'Payment succeeded but booking could not be completed. Contact support with your payment ID: ' +
                 response.razorpay_payment_id
             )
           } finally {
@@ -220,14 +383,23 @@ export default function Booking() {
         },
       }
 
-      const razorpayCheckout = new window.Razorpay(options)
+      if (!window.Razorpay) {
+        throw new Error(
+          'Razorpay checkout is not loaded.'
+        )
+      }
+
+      const razorpayCheckout =
+        new window.Razorpay(options)
 
       razorpayCheckout.open()
+
     } catch (err) {
       console.error(err)
 
       setError(
         err.response?.data?.error ||
+          err.message ||
           'Could not start payment. Please try again.'
       )
 
@@ -255,6 +427,7 @@ export default function Booking() {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center">
+
           <p className="text-red-400 mb-3">
             Shop not found.
           </p>
@@ -265,6 +438,7 @@ export default function Booking() {
           >
             Go home
           </Link>
+
         </div>
       </div>
     )
@@ -276,6 +450,7 @@ export default function Booking() {
   if (!selectedGame) {
     return (
       <div className="min-h-screen bg-black text-white">
+
         <header className="border-b border-zinc-900 px-6 py-4">
           <Link
             to={`/shop/${shop.id}`}
@@ -286,6 +461,7 @@ export default function Booking() {
         </header>
 
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+
           <div className="text-4xl mb-4">
             🎮
           </div>
@@ -304,19 +480,21 @@ export default function Booking() {
           >
             Choose Game
           </Link>
+
         </div>
       </div>
     )
   }
 
   // ---------------------------------------------------------
-  // MAIN BOOKING PAGE
+  // MAIN PAGE
   // ---------------------------------------------------------
   return (
     <div className="min-h-screen bg-black text-white">
 
       {/* HEADER */}
       <header className="border-b border-zinc-900 px-6 py-4">
+
         <div className="max-w-3xl mx-auto flex items-center justify-between">
 
           <Link
@@ -331,12 +509,14 @@ export default function Booking() {
           </span>
 
         </div>
+
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
 
         {/* TITLE */}
         <div>
+
           <p className="text-red-500 text-xs uppercase tracking-widest mb-2">
             Booking
           </p>
@@ -348,12 +528,12 @@ export default function Booking() {
           <p className="text-zinc-500 text-sm mt-1">
             Select a machine, date and available time slot.
           </p>
+
         </div>
 
-        {/* ---------------------------------------------------
-            SELECTED GAME
-        ---------------------------------------------------- */}
+        {/* SELECTED GAME */}
         <div>
+
           <h2 className="text-lg font-semibold mb-3">
             Selected Game
           </h2>
@@ -362,7 +542,6 @@ export default function Booking() {
 
             <div className="flex items-center">
 
-              {/* GAME IMAGE */}
               <div className="w-28 h-24 bg-zinc-900 flex-shrink-0">
 
                 {selectedGame.image ? (
@@ -379,12 +558,12 @@ export default function Booking() {
 
               </div>
 
-              {/* GAME DETAILS */}
               <div className="p-4 flex-1">
 
                 <div className="flex items-center justify-between gap-3">
 
                   <div>
+
                     <h3 className="font-semibold">
                       {selectedGame.name}
                     </h3>
@@ -395,6 +574,7 @@ export default function Booking() {
                         ? 'machine'
                         : 'machines'}
                     </p>
+
                   </div>
 
                   <span className="text-red-400 font-semibold whitespace-nowrap">
@@ -408,11 +588,10 @@ export default function Booking() {
             </div>
 
           </div>
+
         </div>
 
-        {/* ---------------------------------------------------
-            MACHINE SELECTION
-        ---------------------------------------------------- */}
+        {/* MACHINE */}
         <div>
 
           <div className="flex items-center justify-between mb-3">
@@ -448,71 +627,74 @@ export default function Booking() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
 
-              {selectedGame.machines.map((machine, index) => {
+              {selectedGame.machines.map(
+                (machine, index) => {
 
-                const isSelected =
-                  selectedMachine?.id === machine.id
+                  const isSelected =
+                    selectedMachine?.id === machine.id
 
-                const machineName =
-                  machine.name ||
-                  machine.machine_name ||
-                  machine.title ||
-                  `Machine ${index + 1}`
+                  const machineName =
+                    machine.name ||
+                    machine.machine_name ||
+                    machine.title ||
+                    `Machine ${index + 1}`
 
-                return (
-                  <button
-                    key={machine.id}
-                    onClick={() => {
-                      setSelectedMachine(machine)
-                      setSelectedDate(null)
-                      setSelectedSlot(null)
-                      setAvailableSlots([])
-                    }}
-                    className={`text-left border rounded-xl p-4 transition ${
-                      isSelected
-                        ? 'border-red-500 bg-red-500/10'
-                        : 'border-zinc-800 bg-zinc-950 hover:border-red-500/50'
-                    }`}
-                  >
+                  return (
+                    <button
+                      key={machine.id}
+                      onClick={() => {
+                        setSelectedMachine(machine)
+                        setSelectedDate(null)
+                        setSelectedSlot(null)
+                        setAvailableSlots([])
+                        setLockToken(null)
+                        setLockExpiresAt(null)
+                      }}
+                      className={`text-left border rounded-xl p-4 transition ${
+                        isSelected
+                          ? 'border-red-500 bg-red-500/10'
+                          : 'border-zinc-800 bg-zinc-950 hover:border-red-500/50'
+                      }`}
+                    >
 
-                    <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between">
 
-                      <div>
+                        <div>
 
-                        <div className="text-lg mb-1">
-                          🖥️
+                          <div className="text-lg mb-1">
+                            🖥️
+                          </div>
+
+                          <p className="font-medium">
+                            {machineName}
+                          </p>
+
+                          <p className="text-zinc-600 text-xs mt-1">
+                            Machine ID: {machine.id}
+                          </p>
+
                         </div>
 
-                        <p className="font-medium">
-                          {machineName}
-                        </p>
-
-                        <p className="text-zinc-600 text-xs mt-1">
-                          Machine ID: {machine.id}
-                        </p>
+                        {isSelected && (
+                          <span className="text-red-500 text-lg">
+                            ✓
+                          </span>
+                        )}
 
                       </div>
 
-                      {isSelected && (
-                        <span className="text-red-500 text-lg">
-                          ✓
-                        </span>
-                      )}
-
-                    </div>
-
-                  </button>
-                )
-              })}
+                    </button>
+                  )
+                }
+              )}
 
             </div>
+
           )}
 
         </div>
 
-        {/* ---------------------------------------------------
-            DATE SELECTION
-        ---------------------------------------------------- */}
+        {/* DATE */}
         {selectedMachine && (
 
           <div>
@@ -525,10 +707,13 @@ export default function Booking() {
 
               {selectedDate && (
                 <span className="text-red-400 text-sm">
-                  {selectedDate.toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                  })}
+                  {selectedDate.toLocaleDateString(
+                    'en-IN',
+                    {
+                      day: 'numeric',
+                      month: 'short',
+                    }
+                  )}
                 </span>
               )}
 
@@ -545,7 +730,9 @@ export default function Booking() {
                 return (
                   <button
                     key={d.toDateString()}
-                    onClick={() => {
+                    onClick={async () => {
+                      await unlockCurrentSlot()
+
                       setSelectedDate(d)
                       setSelectedSlot(null)
                     }}
@@ -557,9 +744,12 @@ export default function Booking() {
                   >
 
                     <p className="text-xs text-zinc-500">
-                      {d.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                      })}
+                      {d.toLocaleDateString(
+                        'en-US',
+                        {
+                          weekday: 'short',
+                        }
+                      )}
                     </p>
 
                     <p className="font-semibold">
@@ -567,9 +757,12 @@ export default function Booking() {
                     </p>
 
                     <p className="text-[10px] text-zinc-600 mt-1">
-                      {d.toLocaleDateString('en-US', {
-                        month: 'short',
-                      })}
+                      {d.toLocaleDateString(
+                        'en-US',
+                        {
+                          month: 'short',
+                        }
+                      )}
                     </p>
 
                   </button>
@@ -581,9 +774,7 @@ export default function Booking() {
           </div>
         )}
 
-        {/* ---------------------------------------------------
-            TIME SLOT SELECTION
-        ---------------------------------------------------- */}
+        {/* TIME SLOTS */}
         {selectedMachine && selectedDate && (
 
           <div>
@@ -594,9 +785,9 @@ export default function Booking() {
                 3. Select a Time Slot
               </h2>
 
-              {selectedSlot && (
-                <span className="text-red-400 text-sm">
-                  Selected
+              {lockExpiresAt && (
+                <span className="text-yellow-400 text-sm">
+                  Reserved for you
                 </span>
               )}
 
@@ -629,14 +820,26 @@ export default function Booking() {
                   const isSelected =
                     selectedSlot?.id === slot.id
 
+                  const isLocked =
+                    slot.is_locked &&
+                    !isSelected
+
                   return (
                     <button
                       key={slot.id}
-                      disabled={slot.is_booked}
-                      onClick={() => setSelectedSlot(slot)}
+                      disabled={
+                        slot.is_booked ||
+                        isLocked ||
+                        submitting
+                      }
+                      onClick={() =>
+                        handleSelectSlot(slot)
+                      }
                       className={`py-3 rounded-lg text-sm border transition ${
                         slot.is_booked
                           ? 'border-zinc-800 bg-zinc-950 text-zinc-600 cursor-not-allowed line-through'
+                          : isLocked
+                          ? 'border-yellow-900 bg-yellow-950/20 text-yellow-600 cursor-not-allowed'
                           : isSelected
                           ? 'border-red-500 bg-red-500/10 text-white'
                           : 'border-zinc-700 bg-zinc-950 hover:border-red-500/50'
@@ -657,6 +860,18 @@ export default function Booking() {
                         </div>
                       )}
 
+                      {isLocked && (
+                        <div className="text-[10px] text-yellow-700 mt-1">
+                          Reserved
+                        </div>
+                      )}
+
+                      {isSelected && (
+                        <div className="text-[10px] text-red-400 mt-1">
+                          Your reservation
+                        </div>
+                      )}
+
                     </button>
                   )
                 })}
@@ -667,9 +882,7 @@ export default function Booking() {
           </div>
         )}
 
-        {/* ---------------------------------------------------
-            CUSTOMER DETAILS
-        ---------------------------------------------------- */}
+        {/* CUSTOMER DETAILS */}
         {selectedSlot && (
 
           <div>
@@ -684,7 +897,9 @@ export default function Booking() {
                 type="text"
                 placeholder="Full Name"
                 value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
+                onChange={(e) =>
+                  setGuestName(e.target.value)
+                }
                 className="bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-red-500"
               />
 
@@ -692,7 +907,9 @@ export default function Booking() {
                 type="tel"
                 placeholder="Phone Number"
                 value={guestPhone}
-                onChange={(e) => setGuestPhone(e.target.value)}
+                onChange={(e) =>
+                  setGuestPhone(e.target.value)
+                }
                 className="bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-red-500"
               />
 
@@ -701,9 +918,16 @@ export default function Booking() {
           </div>
         )}
 
-        {/* ---------------------------------------------------
-            BOOKING SUMMARY
-        ---------------------------------------------------- */}
+        {/* ERROR */}
+        {error && (
+          <div className="bg-red-950/30 border border-red-900 rounded-lg p-4">
+            <p className="text-red-400 text-sm">
+              {error}
+            </p>
+          </div>
+        )}
+
+        {/* BOOKING SUMMARY */}
         {canConfirm && (
 
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
@@ -769,15 +993,9 @@ export default function Booking() {
 
             </div>
 
-            {error && (
-              <p className="text-red-400 text-sm mb-3">
-                {error}
-              </p>
-            )}
-
             <button
               onClick={() => setShowPolicy(true)}
-              disabled={submitting}
+              disabled={submitting || !lockToken}
               className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 py-3 rounded-lg font-medium transition"
             >
               {submitting
@@ -790,17 +1008,13 @@ export default function Booking() {
 
       </div>
 
-      {/* -----------------------------------------------------
-          CANCELLATION POLICY
-      ------------------------------------------------------ */}
+      {/* CANCELLATION POLICY */}
       {showPolicy && (
-
         <CancellationPolicyModal
           shopPhone={shop.phone}
           onAgree={handlePolicyAgree}
           onClose={() => setShowPolicy(false)}
         />
-
       )}
 
     </div>
